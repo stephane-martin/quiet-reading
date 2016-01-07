@@ -8,9 +8,14 @@ import os
 on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 
 requirements = [
-    'readability-lxml', 'flask-restful', 'flask'
+    'readability-lxml', 'flask-restful', 'flask', 'requests', 'paste', 'cherrypy', 'redis', 'hiredis', 'spooky', 'lxml',
+    'cssselect', 'beautifulsoup4', 'langid', 'numpy', 'pattern', 'future', 'webassets', 'pyScss', 'enum34', 'jsmin',
+    'csscompressor', 'arrow', 'python-dateutil'
 ]
-setup_requires = ['setuptools_git', 'setuptools', 'twine', 'wheel', 'pip']
+
+setup_requires = [
+    'setuptools_git', 'setuptools', 'twine', 'wheel', 'pip', 'nose'
+]
 
 name = 'quiet-reading'
 version = '0.1'

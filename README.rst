@@ -5,3 +5,4 @@ Github project: https://github.com/stephane-martin/quiet-reading
 Documentation: http://quiet-reading.readthedocs.org
 
 License: GNU LESSER GENERAL PUBLIC LICENSE v3
+
