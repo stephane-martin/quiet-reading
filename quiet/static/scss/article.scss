@@ -1,0 +1,43 @@
+#quiet-reading-main-content {
+
+    figure {
+        text-align: center;
+        margin: 2em 0 2em 0;
+    }
+
+    /* le monde */
+
+    .encart_retrait_gauche {
+        margin-left: 10%;
+        margin-right: 10%;
+        text-align: center;
+
+    }
+
+    .encart_retrait_gauche .accroche {
+        color: grey;
+    }
+
+    .encart_retrait_gauche .accroche br {
+        display: none;
+    }
+
+    .video_player {
+        display: none;
+    }
+
+    .reference {
+        color: grey;
+    }
+
+    .lire {
+        color: grey;
+    }
+
+    /* NYT */
+
+    figure.promo {
+        display: none;
+    }
+
+}
