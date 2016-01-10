@@ -6,178 +6,141 @@ from __future__ import print_function
 from __future__ import absolute_import
 
 import os
-import logging.config
+from os.path import join, exists, abspath, expanduser
+from datetime import timedelta
 
-from redis import StrictRedis
-import webassets
-import webassets.filter
-import csscompressor
+from future.builtins import str as str_unicode
+import pytoml as toml
+import authomatic
+import authomatic.providers.oauth2
+
 
 this_dir = os.path.abspath(os.path.dirname(__file__))
+CONFIG_FILE_PATH_ENVVAR = 'QUIET_READING_CONFIG_PATH'
 
-class BasicConfig(object):
-    REALM = 'Zone vesperal.org'
-    SECRET_KEY = "ZjNzLW9EYmZhVUxRPkVrcE5KTVdicmkxNUZfMFZRQnlxLUxEak04RGFDMD0="
+
+class QuietConfig(object):
+    SECRET_KEY = ""
+    USE_X_SENDFILE = False
     SESSION_COOKIE_NAME = "quiet_reading_ssid"
     SESSION_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_DURATION = 2592000
     WTF_CSRF_ENABLED = True
     WTF_I18N_ENABLED = True
-    EXECUTE_ENV = None
+    EXECUTE_ENV = ""
     APPLICATION_ROOT = "/quiet-reading"
-
-    REDIS_SERVER = "127.0.0.1"
-    REDIS_PORT = 6379
-    REDIS_DB = 0
-    REDIS_PREFIX = "quiet_"
 
     LOGGING_FILENAME = '/tmp/quiet-reading.log'
     LOGGING_LEVEL = 'INFO'
     DISABLE_EXISTING_LOGGERS = True
-
-    @classmethod
-    def setup_redis(cls, app):
-        app.redis_conn = StrictRedis(host=cls.REDIS_SERVER, port=cls.REDIS_PORT, db=cls.REDIS_DB)
-        app.redis_conn.ping()
-
-    @classmethod
-    def setup_logging(cls):
-        logconf = {
-            'version': 1,
-            'disable_existing_loggers': cls.DISABLE_EXISTING_LOGGERS,
-            'formatters': {
-                'fileformat': {
-                    'format': '%(asctime)s --- %(name)s --- %(process)d --- %(levelname)s --- %(message)s'
-                },
-                'consoleformat': {
-                    'format': '%(levelname)s --- %(message)s'
-                }
-            },
-            'handlers': {
-                'console': {
-                    'level': 'DEBUG',
-                    'class': 'logging.StreamHandler',
-                    'formatter': 'consoleformat'
-                },
-                'f': {
-                    'level': 'DEBUG',
-                    'class': 'logging.FileHandler',
-                    'formatter': 'fileformat',
-                    'filename': cls.LOGGING_FILENAME,
-                    'encoding': 'utf-8'
-                }
-            },
-            'loggers': {
-                'manager': {
-                    'handlers': ['console', 'f'],
-                    'level': cls.LOGGING_LEVEL
-                }
-            },
-            'root': {
-                'handlers': [],
-                'level': 'INFO'
-            }
-        }
-        logging.config.dictConfig(logconf)
-
-    @classmethod
-    def init_app(cls, app):
-        cls.setup_logging()
-        cls.WTF_CSRF_SECRET_KEY = cls.SECRET_KEY
-        app.config.from_object(cls)
-        cls.setup_redis(app)
-        cls.init_assets_env(app)
-        cls.init_assets_bundles(app)
-
-    @classmethod
-    def init_assets_env(cls, app):
-        webassets.filter.register_filter(CSSCompressor)
-        app.assets = webassets.Environment(directory=os.path.join(this_dir, 'static'), url='static')
-        app.assets.url_expire = True
-        app.assets.manifest = 'cache'
-        app.assets.cache = True
-        app.assets.versions = 'hash'
-        app.assets.config['PYSCSS_DEBUG_INFO'] = False
-        app.assets.config['PYSCSS_STYLE'] = 'compact'
-
-    @classmethod
-    def init_assets_bundles(cls, app):
-
-        js_bundle = webassets.Bundle(
-            'js/jquery.js', 'js/jquery.validate.js', 'js/additional-methods.js', 'js/bootstrap.js', 'js/ui.js',
-            output='js/bundle.js', filters='jsmin'
-        )
-
-        scss_bundle = webassets.Bundle(
-            'scss/article.scss', 'scss/ui.scss', filters='pyscss'
-        )
-
-        css_bundle = webassets.Bundle(
-            'css/bootstrap.css', 'css/bootstrap-theme.css', scss_bundle,
-            output="css/bundle.css", filters='csscompressor'
-        )
-
-        app.assets.register('js_bundle', js_bundle)
-        app.assets.register('css_bundle', css_bundle)
-
-
-class DevConfig(BasicConfig):
-    EXECUTE_ENV = "DEV"
-    DEBUG = True
-    SERVER_NAME = "127.0.0.1:8080"
-    PREFERRED_URL_SCHEME = 'http'
-
-    CHERRY = {
-        'socket_host': b'127.0.0.1',
-        'socket_port': 8080,
-        'socket_timeout': 20,
-        'queue_size': 20,
-        'n_threads': 20,
-        'autoreload': True,
-        'print_logs': True
+    WAITRESS = {
+        'SOCKET_HOST': b'127.0.0.1',
+        'SOCKET_PORT': 8080,
+        'SOCKET_TIMEOUT': 20,
+        'N_THREADS': 20,
     }
 
-    LOGGING_FILENAME = '/tmp/quiet-reading.log'
-    LOGGING_LEVEL = 'DEBUG'
-    DISABLE_EXISTING_LOGGERS = False
+    OPENCALAIS_API_KEY = ""
+    IMAGE_STORE_ROOT = join(this_dir, 'dl_images')
+    IMAGE_STORE_MAX_SIZE = 30 * 1024 * 1024 * 1024
+    CACHE_ROOT = join(this_dir, 'cache')
+    CACHE_MAX_SIZE = 30 * 1024 * 1024 * 1024
 
-    @classmethod
-    def init_assets_env(cls, app):
-        BasicConfig.init_assets_env(app)
-        app.assets.auto_build = True
-        app.assets.debug = False
+    AUTH_CONFIG = {}
+
+    GITHUB = {
+        'CONSUMER_KEY': '',
+        'CONSUMER_SECRET': '',
+        'USER_AGENT': 'quiet-reading-TEST'
+    }
+
+    REDDIT = {
+        'CONSUMER_KEY': '',
+        'CONSUMER_SECRET': '',
+        'USER_AGENT': 'quiet-reading-TEST'
+    }
+
+    LINKEDIN = {
+        'CONSUMER_KEY': '',
+        'CONSUMER_SECRET': '',
+    }
+
+    def load_config_from_config_file(self):
+        filepath = os.environ.get(CONFIG_FILE_PATH_ENVVAR)
+        if filepath:
+            if exists(filepath):
+                with open(filepath, 'rb') as f:
+                    self.inject_toml_conf(toml.load(f))
+
+    def inject_toml_conf(self, toml_conf):
+        for key, val in toml_conf.items():
+            k = key.upper()
+            if isinstance(val, dict):
+                if k in ['FLASK', 'COOKIES', 'LOGGING', 'OPENCALAIS', 'IMAGES_STORE', 'LMDB_CACHE']:
+                    for option_name, option_val in val.items():
+                        self.__setattr__(option_name.upper(), option_val)
+                else:
+                    if not hasattr(self, k):
+                        self.__setattr__(k, {})
+                    d = self.__getattribute__(k)
+                    [d.__setitem__(option_name.upper(), option_val) for (option_name, option_val) in val.items()]
+            elif isinstance(val, str_unicode):
+                self.__setattr__(k, val)
+
+    def set_authomatic_providers(self):
+        self.AUTH_CONFIG = {}
+        if bool(self.GITHUB['CONSUMER_KEY']) and bool(self.GITHUB['CONSUMER_SECRET']):
+            self.AUTH_CONFIG['github'] = {
+                'class_': authomatic.providers.oauth2.GitHub,
+                'scope': [],
+                'id': authomatic.provider_id(),
+                'access_headers': {'User-Agent': self.GITHUB['USER_AGENT']},
+                'consumer_key': self.GITHUB['CONSUMER_KEY'],
+                'consumer_secret': self.GITHUB['CONSUMER_SECRET']
+            }
+
+        if bool(self.REDDIT['CONSUMER_KEY']) and bool(self.REDDIT['CONSUMER_SECRET']):
+            self.AUTH_CONFIG['reddit'] = {
+                'class_': authomatic.providers.oauth2.Reddit,
+                'scope': ['identity'],
+                'id': authomatic.provider_id(),
+                'access_headers': {'User-Agent': self.REDDIT['USER_AGENT']},
+                'consumer_key': self.REDDIT['CONSUMER_KEY'],
+                'consumer_secret': self.REDDIT['CONSUMER_SECRET']
+            }
+
+        if bool(self.LINKEDIN['CONSUMER_KEY']) and bool(self.LINKEDIN['CONSUMER_SECRET']):
+            self.AUTH_CONFIG['linkedin'] = {
+                'class_': authomatic.providers.oauth2.LinkedIn,
+                'scope': [],
+                'id': authomatic.provider_id(),
+                'consumer_key': self.LINKEDIN['CONSUMER_KEY'],
+                'consumer_secret': self.LINKEDIN['CONSUMER_SECRET']
+            }
+
+    def __init__(self):
+        self.load_config_from_config_file()
+        self.WTF_CSRF_SECRET_KEY = self.SECRET_KEY
+        self.IMAGE_STORE_ROOT = abspath(expanduser(self.IMAGE_STORE_ROOT))
+        self.CACHE_ROOT = abspath(expanduser(self.CACHE_ROOT))
+        self.REMEMBER_COOKIE_DURATION = timedelta(seconds=self.REMEMBER_COOKIE_DURATION)
+        self.set_authomatic_providers()
 
 
-class ProdConfig(BasicConfig):
+class ProdConfig(object):
     EXECUTE_ENV = "PROD"
     DEBUG = False
     SERVER_NAME = "www.vesperal.org"
     PREFERRED_URL_SCHEME = 'https'
     SESSION_COOKIE_SECURE = True
-    CHERRY = {
-        'socket_host': b'127.0.0.1',
+    WAITRESS = {
+        'socket_host': b'127.0.01',
         'socket_port': 8080,
         'socket_timeout': 20,
-        'queue_size': 20,
-        'n_threads': 20,
-        'autoreload': False,
-        'print_logs': False
+        'n_threads': 100,
     }
 
     LOGGING_FILENAME = '/tmp/quiet-reading.log'
     LOGGING_LEVEL = 'INFO'
     DISABLE_EXISTING_LOGGERS = True
 
-    @classmethod
-    def init_assets_env(cls, app):
-        BasicConfig.init_assets_env(app)
-        app.assets.auto_build = False
-        app.assets.debug = False
-
-config = ProdConfig() if os.environ.get('QUIET_READING_ENV', None) == "PROD" else DevConfig()
-
-
-class CSSCompressor(webassets.filter.Filter):
-    name = 'csscompressor'
-
-    def output(self, _in, out, **kw):
-        out.write(csscompressor.compress(_in.read()))

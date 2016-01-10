@@ -12,4 +12,4 @@ from flask_restful import Resource
 class HelloWorld(Resource):
 
     def get(self):
-        return Response(render_template('hello.html'), mimetype='text/html')
+        return Response(render_template('hello.html'), mimetype='text/html; charset=utf-8')

@@ -6,6 +6,7 @@ from __future__ import print_function
 from __future__ import absolute_import
 
 import cgi
+import json
 
 # noinspection PyPackageRequirements
 import readability.readability
@@ -13,10 +14,17 @@ import bs4
 import spooky
 import requests
 from future.moves.urllib.parse import urljoin
+from future.builtins import str as str_unicode
+
+
+def make_utf8(x):
+    return x.encode('utf-8') if isinstance(x, str_unicode) else x
 
 
 class Article(object):
-    def __init__(self, url=b'', id=b'', etag=b'', last_modified=b'', summary='', title='', text=''):
+
+    def __init__(self, url=b'', id='', etag=b'', last_modified=b'', summary='', title='', text=''):
+        url = make_utf8(url)
         self.url = url
         self.etag = etag
         self.last_modified = last_modified
@@ -26,15 +34,33 @@ class Article(object):
         if id:
             self.id = id
         else:
-            self.id = b'%x' % spooky.hash128(url) if url else id
+            self.id = '%x' % spooky.hash128(url) if url else id
+
+    def to_json(self):
+        return json.dumps({
+            'url': self.url,
+            'etag': self.etag,
+            'last_modified': self.last_modified,
+            'summary': self.summary,
+            'title': self.title,
+            'text': self.text
+        })
 
     @classmethod
-    def factory(cls, url=b'', h=b'', etag=b'', last_modified=b'', summary='', title='', text=''):
-        return cls(url=url, h=h, etag=etag, last_modified=last_modified, summary=summary, title=title, text=text)
+    def from_json(cls, json_text):
+        d = json.loads(json_text)
+        return cls(
+            url=d['url'], etag=d['etag'], last_modified=d['last_modified'], summary=d['summary'],
+            title=d['title'], text=d['text']
+        )
+
+    @classmethod
+    def factory(cls, url=b'', id='', etag=b'', last_modified=b'', summary='', title='', text=''):
+        return cls(url=url, id=id, etag=etag, last_modified=last_modified, summary=summary, title=title, text=text)
 
     def __copy__(self):
         return self.factory(
-            url=self.url, h=self.id, etag=self.etag, last_modified=self.last_modified, summary=self.summary,
+            url=self.url, id=self.id, etag=self.etag, last_modified=self.last_modified, summary=self.summary,
             title=self.title, text=self.title
         )
 
@@ -42,21 +68,22 @@ class Article(object):
         return hash((self.url, self.id, self.etag, self.last_modified, self.text, self.title))
 
     @classmethod
-    def from_redis(cls, id, redis_conn):
-        if (not redis_conn) or (not id):
+    def from_cache(cls, id, article_cache):
+        if (not article_cache) or (not id):
             return None
-        if not redis_conn.exists(id):
-            return None
-        l = redis_conn.hmget(id, ['url', 'etag', 'last_modified', 'summary', 'title', 'text'])
-        return cls(
-            url=l[0], etag=l[1], last_modified=l[2], summary=l[3].decode('utf-8'), title=l[4].decode('utf-8'),
-            text=l[5].decode('utf-8')
-        )
+        a = article_cache.get(id)
+        return None if a is None else cls.from_json(a)
+
+    def to_cache(self, article_cache):
+        if not article_cache:
+            return
+        article_cache.set(self.id, self.to_json())
+        return self
 
     @classmethod
-    def fetch(cls, url=b'', id=b'', redis_conn=None):
-        article_from_redis = cls.from_redis(id, redis_conn)
-        article = article_from_redis if article_from_redis else cls(url=url, id=id)
+    def fetch(cls, url=b'', id='', article_cache=None, image_store=None):
+        article_from_cache = cls.from_cache(id, article_cache)
+        article = article_from_cache if article_from_cache else cls(url=url, id=id)
 
         if not article.url:
             raise requests.RequestException("No URL provided, or unknown ID")
@@ -78,12 +105,12 @@ class Article(object):
                 raise requests.RequestException("content_type header is not set")
             if 'text/html' not in content_type:
                 raise requests.RequestException("content_type is not text/html")
-            article._complete_from_response(resp)
+            article._complete_from_response(resp, image_store)
         else:
             raise requests.RequestException("unexpected status code: {}".format(resp.status_code))
         return article
 
-    def _complete_from_response(self, resp):
+    def _complete_from_response(self, resp, image_store):
         assert(isinstance(resp, requests.Response))
         self.etag = resp.headers.get('ETag', b'')
         self.last_modified = resp.headers.get('Last-Modified', b'')
@@ -102,23 +129,12 @@ class Article(object):
             "<div id='quiet-reading-main-content'>" + readability_obj.summary(True) + "</div>", 'lxml'
         )
         clean_soup(summary_soup)
-        fix_summary_soup(summary_soup)
+        fix_summary_soup(summary_soup, image_store)
 
         self.summary = summary_soup.find('div', id='quiet-reading-main-content').prettify()
         self.text = summary_soup.text.strip('\r\n ')
 
-    def to_redis(self, redis_conn=None):
-        if not redis_conn:
-            return
-        redis_conn.hmset(self.id, {
-            'url': self.url,
-            'etag': self.etag,
-            'last_modified': self.last_modified,
-            'summary': self.summary,
-            'title': self.title,
-            'text': self.text
-        })
-        return self
+
 
 
 def clean_soup(soup, url=None):
@@ -135,10 +151,20 @@ def clean_soup(soup, url=None):
             tag['href'] = urljoin(base_url, tag['href'])
         for tag in soup.find_all('link', href=True):
             tag['href'] = urljoin(base_url, tag['href'])
+
     return soup
 
 
-def fix_summary_soup(summary_soup):
+def fix_summary_soup(summary_soup, image_store):
+    # if the original article has mentioned a main image, and if its not present in the summary, add it
+    if image_store:
+        # download images and replace image links
+        img_tags = summary_soup.find_all('img', src=True)
+        old_urls = [tag['src'] for tag in img_tags]
+        assoc_old_url_new_url = image_store.add_many(old_urls)
+        assoc_tag_new_url = [(tag, assoc_old_url_new_url[tag['src']]) for tag in img_tags]
+        [tag.attrs.__setitem__('src', new_url) for (tag, new_url) in assoc_tag_new_url if new_url]
+
     # for lemonde.fr, correct figcaption so that image captions are displayed correctly
     for tag in summary_soup.find_all('figcaption', class_="legende", attrs={"data-caption": True}):
         tag.string = tag['data-caption']

@@ -11,11 +11,13 @@ import requests
 
 from ..article import Article
 from . import make_parser, what_request_wants, get_assets_urls
+from ..imagestore import ImageStore
 
 
 class Cleaning(Resource):
 
     def _do(self):
+        article_cache = current_app.article_cache
         args = make_parser().parse_args()
         if args.target and args.h:
             return "provide 'target' OR 'h'", 400
@@ -23,12 +25,16 @@ class Cleaning(Resource):
             return "provide either 'target' or 'h'", 400
 
         try:
-            article = Article.fetch(url=args.get('target', ''), id=args.get('h', ''), redis_conn=current_app.redis_conn)
+            article = Article.fetch(
+                url=args.get('target', ''),
+                id=args.get('h', ''),
+                article_cache=article_cache,
+                image_store=ImageStore(current_app)
+            )
         except requests.RequestException as ex:
             return str(ex), 500
-        else:
-            article.to_redis(current_app.redis_conn)
 
+        article.to_cache(article_cache)
         t = what_request_wants(request)
         if t == "json":
             return {
@@ -42,10 +48,10 @@ class Cleaning(Resource):
         elif t == "plain":
             pass
         else:
-            article = render_template(
+            tpl = render_template(
                 'article.html', title=article.title, content=article.summary, url=article.url, assets=get_assets_urls()
             )
-            return make_response(article, 200, {'mimetype': 'text/html'})
+            return make_response(tpl, 200, {'Content-Type': 'text/html; charset=utf-8'})
 
     def get(self):
         return self._do()

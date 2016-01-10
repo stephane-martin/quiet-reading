@@ -16,6 +16,13 @@ def make_parser():
     return parser_url
 
 
+def make_calais_parser():
+    parser_url = reqparse.RequestParser()
+    parser_url.add_argument('target', type=inputs.url, help="Provide a URL for 'target' parameter")
+    parser_url.add_argument('text', help="Provide some text to analyze")
+    return parser_url
+
+
 def what_request_wants(req):
     best = req.accept_mimetypes.best_match(['text/html', 'application/json', 'application/pdf', 'text/plain'])
     if best == 'application/json':
