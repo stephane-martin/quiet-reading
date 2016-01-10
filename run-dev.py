@@ -12,5 +12,5 @@ from quiet.main import main
 
 if __name__ == '__main__':
     this_dir = abspath(dirname(__file__))
-    os.environ['QUIET_READING_CONFIG_PATH'] = join(this_dir, 'config-dev.toml')
+    os.environ['QUIET_READING_CONFIG_PATH'] = join(this_dir, 'configdev.toml')
     main()

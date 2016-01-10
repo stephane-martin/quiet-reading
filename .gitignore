@@ -14,6 +14,7 @@
 /config-dev.toml
 # .idea/tasks.xml
 # .idea/dictionaries
+/configdev.toml
 /components
 
 # Sensitive or high-churn files:
