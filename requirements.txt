@@ -1,5 +1,7 @@
 future
 enum34
+futures
+pytoml
 
 beautifulsoup4
 lxml
@@ -8,17 +10,20 @@ cssselect
 pattern
 langid
 numpy
+jmespath
 
-redis
-hiredis
+lmdb
 
 webassets
 csscompressor
 pyScss
 flask
 flask-restful
+Flask-Session
+flask-login
+authomatic
 requests
-cherrypy
+waitress
 paste
 jsmin
 

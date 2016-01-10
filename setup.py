@@ -8,9 +8,10 @@ import os
 on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 
 requirements = [
-    'readability-lxml', 'flask-restful', 'flask', 'requests', 'paste', 'cherrypy', 'redis', 'hiredis', 'spooky', 'lxml',
+    'readability-lxml', 'flask-restful', 'flask', 'Flask-Session', 'requests', 'paste', 'waitress',
     'cssselect', 'beautifulsoup4', 'langid', 'numpy', 'pattern', 'future', 'webassets', 'pyScss', 'enum34', 'jsmin',
-    'csscompressor', 'arrow', 'python-dateutil'
+    'csscompressor', 'arrow', 'python-dateutil', 'jmespath', 'lmdb', 'futures', 'pytoml', 'spooky', 'lxml',
+    'flask-login', 'authomatic'
 ]
 
 setup_requires = [
